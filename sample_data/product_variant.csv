@@ -1,0 +1,3 @@
+id,family_id,name,description,drawing_path,created_by,created_at
+70000000-0000-0000-0000-000000000001,60000000-0000-0000-0000-000000000001,Spacer v1 - Standard,Standard spacer with 6 bolt holes,/drawings/variants/spacer-v1-std.pdf,30000000-0000-0000-0000-000000000002,2024-09-01T10:00:00Z
+70000000-0000-0000-0000-000000000002,60000000-0000-0000-0000-000000000001,Spacer v2 - Extended,Extended length spacer with 8 bolt holes and ground faces,/drawings/variants/spacer-v2-ext.pdf,30000000-0000-0000-0000-000000000002,2024-09-15T11:30:00Z

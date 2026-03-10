@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuotAI – Data Model Flowchart</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #0f1117;
+    color: #e0e0e0;
+    overflow: hidden;
+  }
+
+  #header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    background: linear-gradient(135deg, #1a1d2e, #0f1117);
+    border-bottom: 1px solid #2a2d3e;
+    padding: 12px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  #header h1 {
+    font-size: 18px; font-weight: 600; color: #fff;
+    letter-spacing: 0.5px;
+  }
+  #header h1 span { color: #6c8cff; }
+  #header .subtitle { font-size: 12px; color: #888; margin-top: 2px; }
+  #controls {
+    display: flex; gap: 8px; align-items: center;
+  }
+  #controls button {
+    background: #2a2d3e; border: 1px solid #3a3d4e; color: #ccc;
+    padding: 6px 14px; border-radius: 6px; cursor: pointer;
+    font-size: 12px; transition: all 0.2s;
+  }
+  #controls button:hover { background: #3a3d4e; color: #fff; }
+  #zoom-level { font-size: 11px; color: #666; min-width: 40px; text-align: center; }
+
+  #canvas { width: 100vw; height: 100vh; padding-top: 56px; }
+
+  #legend {
+    position: fixed; bottom: 16px; left: 16px; z-index: 10;
+    background: #1a1d2eee; border: 1px solid #2a2d3e; border-radius: 10px;
+    padding: 14px 18px; font-size: 12px;
+  }
+  #legend h3 { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+  .legend-dot {
+    width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0;
+  }
+
+  #tooltip {
+    position: fixed; pointer-events: none; z-index: 20;
+    background: #1e2030; border: 1px solid #3a3d5e; border-radius: 8px;
+    padding: 10px 14px; font-size: 12px; max-width: 280px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    opacity: 0; transition: opacity 0.15s;
+    line-height: 1.5;
+  }
+  #tooltip .tt-title { font-weight: 600; color: #fff; margin-bottom: 4px; }
+  #tooltip .tt-body { color: #aaa; }
+  #tooltip .tt-db { color: #6c8cff; font-size: 11px; margin-top: 4px; font-style: italic; }
+
+  .section-label {
+    font-size: 14px; fill: #555; text-transform: uppercase;
+    letter-spacing: 2px; font-weight: 700;
+  }
+  .section-line { stroke: #2a2d3e; stroke-width: 1; stroke-dasharray: 6,4; }
+  .section-bg { rx: 12; ry: 12; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div>
+    <h1>Quot<span>AI</span> — Data Model</h1>
+    <div class="subtitle">Cost estimation flow for manufacturing quotations</div>
+  </div>
+  <div id="controls">
+    <button id="btn-reset">Reset View</button>
+    <button id="btn-fit">Fit to Screen</button>
+    <span id="zoom-level">100%</span>
+  </div>
+</div>
+
+<svg id="canvas"></svg>
+
+<div id="legend">
+  <h3>Domains</h3>
+  <div class="legend-item"><div class="legend-dot" style="background:#4A7BF7"></div> Company Setup</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#27AE60"></div> Global Catalogs (Admin)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#E67E22"></div> Your Rates &amp; Machines</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#9B59B6"></div> Pricing Templates</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#1ABC9C"></div> Products &amp; Drawings</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#E74C3C"></div> Cost Estimation</div>
+  <div style="margin-top: 10px; border-top: 1px solid #2a2d3e; padding-top: 8px;">
+    <div class="legend-item"><svg width="30" height="12"><line x1="0" y1="6" x2="30" y2="6" stroke="#8899bb" stroke-width="2"/><polygon points="26,3 30,6 26,9" fill="#8899bb"/></svg> Data flows into</div>
+    <div class="legend-item"><svg width="30" height="12"><line x1="0" y1="6" x2="30" y2="6" stroke="#7ea0ff" stroke-width="2" stroke-dasharray="4,3"/><polygon points="26,3 30,6 26,9" fill="#7ea0ff"/></svg> Feeds into (setup → estimate)</div>
+  </div>
+</div>
+
+<div id="tooltip">
+  <div class="tt-title"></div>
+  <div class="tt-body"></div>
+  <div class="tt-db"></div>
+</div>
+
+<script>
+// ──────────────────── DATA ────────────────────
+
+const domains = {
+  company:  { color: '#4A7BF7', bg: '#4A7BF715', border: '#4A7BF740', label: 'COMPANY SETUP' },
+  catalog:  { color: '#27AE60', bg: '#27AE6015', border: '#27AE6040', label: 'GLOBAL CATALOGS' },
+  rates:    { color: '#E67E22', bg: '#E67E2215', border: '#E67E2240', label: 'YOUR RATES & MACHINES' },
+  template: { color: '#9B59B6', bg: '#9B59B615', border: '#9B59B640', label: 'PRICING TEMPLATES' },
+  product:  { color: '#1ABC9C', bg: '#1ABC9C15', border: '#1ABC9C40', label: 'PRODUCTS & DRAWINGS' },
+  estimate: { color: '#E74C3C', bg: '#E74C3C15', border: '#E74C3C40', label: 'COST ESTIMATION' },
+};
+
+const nodes = [
+  // ─── Company Setup ───
+  { id: 'company',   label: 'Company',       icon: '🏢', domain: 'company', x: 140, y: 120, w: 150, h: 54,
+    desc: 'Your organization / tenant. Everything is scoped to your company.',
+    db: 'Table: Organization' },
+  { id: 'teams',     label: 'Teams',          icon: '👥', domain: 'company', x: 80,  y: 210, w: 130, h: 50,
+    desc: 'Departments or groups within your company (e.g. "Shop Floor A"). Informational — no access restrictions.',
+    db: 'Table: UserGroup' },
+  { id: 'users',     label: 'Users',          icon: '👤', domain: 'company', x: 230, y: 210, w: 130, h: 50,
+    desc: 'People who use the system. Roles: Admin, Estimator, or Viewer.',
+    db: 'Table: User' },
+
+  // ─── Global Catalogs ───
+  { id: 'materials', label: 'Materials',      icon: '🧱', domain: 'catalog', x: 490, y: 120, w: 150, h: 54,
+    desc: 'Master list of materials (e.g. SS 316, Aluminum 7075). Maintained by platform admin.',
+    db: 'Table: Material' },
+  { id: 'operations',label: 'Operations',     icon: '⚙️', domain: 'catalog', x: 660, y: 120, w: 150, h: 54,
+    desc: 'Master list of manufacturing operations (e.g. Drilling, Spot Facing, Heat Treatment). Admin-managed, expandable.',
+    db: 'Table: Operation' },
+
+  // ─── Tenant Rates ───
+  { id: 'mat_rates', label: 'Material Rates', icon: '💰', domain: 'rates', x: 440, y: 265, w: 165, h: 54,
+    desc: 'What YOUR company pays per kg for each material. Rates have an effective date so history is preserved when prices change.',
+    db: 'Table: MaterialRate' },
+  { id: 'workcenters', label: 'Work Centers', icon: '🏭', domain: 'rates', x: 635, y: 265, w: 165, h: 54,
+    desc: 'Your machines or vendors (e.g. "CNC Lathe #3", "Vendor: ABC Machining"). Can be tagged to a team.',
+    db: 'Table: WorkCenter' },
+  { id: 'wc_rates',  label: 'Rate Cards',     icon: '📋', domain: 'rates', x: 540, y: 355, w: 200, h: 58,
+    desc: 'The cost per hour for a specific combination of: Work Center × Operation × Material.\n\nExample: "Drilling on CNC Lathe #3 with SS 316 = ₹500/hr"\n\nIf no material-specific rate exists, falls back to a default rate for that machine+operation.',
+    db: 'Table: WorkCenterRate' },
+
+  // ─── Pricing Templates ───
+  { id: 'templates', label: 'Pricing Templates', icon: '📄', domain: 'template', x: 920, y: 120, w: 190, h: 54,
+    desc: 'Reusable templates of overheads and discounts (e.g. "Standard Domestic", "Export Premium"). Select one when starting an estimate.',
+    db: 'Table: PricingTemplate' },
+  { id: 'overheads', label: 'Overhead Items',    icon: '📈', domain: 'template', x: 890, y: 220, w: 160, h: 50,
+    desc: 'Costs added on top: e.g. "Commercial Overhead: 8% of subtotal", "Packaging: ₹50/unit".',
+    db: 'Table: TemplateLineItem (category=overhead)' },
+  { id: 'discounts', label: 'Discount Items',    icon: '📉', domain: 'template', x: 890, y: 290, w: 160, h: 50,
+    desc: 'Reductions applied: e.g. "Volume Discount: 5% of subtotal". Can be % or fixed ₹/unit.',
+    db: 'Table: TemplateLineItem (category=discount)' },
+
+  // ─── Products & Drawings ───
+  { id: 'family',    label: 'Product Family',     icon: '📐', domain: 'product', x: 90, y: 510, w: 185, h: 58,
+    desc: 'A group of similar parts (e.g. "Hydraulic Cylinder Spacers"). Has ONE reference drawing that the AI uses as a baseline.',
+    db: 'Table: ProductFamily' },
+  { id: 'ref_dwg',   label: 'Reference Drawing',  icon: '📎', domain: 'product', x: 70, y: 605, w: 175, h: 50,
+    desc: 'The canonical engineering drawing for this family. AI extracts its features and stores them as a known-good baseline.',
+    db: 'Field: ProductFamily.ref_drawing_path + ref_extraction_data' },
+  { id: 'variant',   label: 'New Variant',         icon: '📤', domain: 'product', x: 300, y: 510, w: 165, h: 58,
+    desc: 'A new part in the family. User uploads its engineering drawing for AI analysis.',
+    db: 'Table: ProductVariant' },
+  { id: 'extraction',label: 'AI Feature Extraction',icon: '🤖', domain: 'product', x: 265, y: 605, w: 210, h: 58,
+    desc: 'Gemini AI receives BOTH the reference drawing and the variant drawing. It performs a full extraction of the variant\'s features (holes, threads, dimensions, tolerances) using the reference as grounding context for accuracy.',
+    db: 'Table: VariantExtraction' },
+
+  // ─── Cost Estimation ───
+  { id: 'estimate',  label: 'Cost Estimate',      icon: '🧮', domain: 'estimate', x: 640, y: 510, w: 185, h: 58,
+    desc: 'The main quotation. Links a variant, its AI extraction, and a pricing template. Can be Draft or Finalized. All data is frozen (snapshotted) so the quote never changes even if rates update later.',
+    db: 'Table: CostEstimation' },
+  { id: 'mat_cost',  label: 'Material Cost',      icon: '🪨', domain: 'estimate', x: 560, y: 630, w: 160, h: 52,
+    desc: 'Weight per unit × rate per kg (looked up from your Material Rates).\n\nExample: 1.2 kg × ₹350/kg = ₹420/unit',
+    db: 'Table: EstimationMaterialCost' },
+  { id: 'op_cost',   label: 'Operation Costs',    icon: '🔧', domain: 'estimate', x: 740, y: 630, w: 170, h: 52,
+    desc: 'For each operation: (setup time + cycle time) × rate per hour from Rate Cards.\n\nExample: Drilling = (0.1 + 0.25 hrs) × ₹500/hr = ₹175',
+    db: 'Table: EstimationOperationCost' },
+  { id: 'adjustments', label: 'Overheads & Discounts', icon: '±', domain: 'estimate', x: 930, y: 630, w: 210, h: 52,
+    desc: 'Seeded from the selected Pricing Template, but fully editable per estimate. You can add one-off items, remove irrelevant ones, or tweak values.',
+    db: 'Table: EstimationAdjustment' },
+  { id: 'summary',   label: 'Cost Summary',       icon: '📊', domain: 'estimate', x: 720, y: 750, w: 185, h: 58,
+    desc: 'Material + Operations = Subtotal\nSubtotal + Overheads − Discounts = Net Cost/Unit\nNet × Quantity = Total Cost',
+    db: 'Table: EstimationSummary' },
+  { id: 'report',    label: 'Report',             icon: '📑', domain: 'estimate', x: 740, y: 860, w: 155, h: 52,
+    desc: 'Generated PDF or Excel report. Stored permanently alongside the finalized estimate.',
+    db: 'Table: EstimationReport' },
+];
+
+const edges = [
+  // Company structure
+  { from: 'company', to: 'teams',    type: 'solid' },
+  { from: 'company', to: 'users',    type: 'solid' },
+
+  // Catalogs → Rates
+  { from: 'materials',  to: 'mat_rates',   type: 'solid' },
+  { from: 'materials',  to: 'wc_rates',    type: 'solid' },
+  { from: 'operations', to: 'wc_rates',    type: 'solid' },
+  { from: 'workcenters',to: 'wc_rates',    type: 'solid' },
+
+  // Templates
+  { from: 'templates', to: 'overheads', type: 'solid' },
+  { from: 'templates', to: 'discounts', type: 'solid' },
+
+  // Product flow
+  { from: 'family',     to: 'ref_dwg',     type: 'solid' },
+  { from: 'family',     to: 'variant',     type: 'solid' },
+  { from: 'ref_dwg',    to: 'extraction',  type: 'solid', label: 'context' },
+  { from: 'variant',    to: 'extraction',  type: 'solid' },
+
+  // Extraction → Estimate
+  { from: 'extraction', to: 'estimate',    type: 'solid' },
+
+  // Setup feeds into estimate (dashed)
+  { from: 'mat_rates',  to: 'mat_cost',    type: 'dashed', label: 'rate lookup', labelDy: -20 },
+  { from: 'wc_rates',   to: 'op_cost',     type: 'dashed', label: 'rate lookup' },
+  { from: 'templates',  to: 'adjustments', type: 'dashed', label: 'seed defaults' },
+
+  // Estimate breakdown
+  { from: 'estimate',   to: 'mat_cost',    type: 'solid' },
+  { from: 'estimate',   to: 'op_cost',     type: 'solid' },
+  { from: 'estimate',   to: 'adjustments', type: 'solid' },
+
+  // → Summary → Report
+  { from: 'mat_cost',    to: 'summary', type: 'solid' },
+  { from: 'op_cost',     to: 'summary', type: 'solid' },
+  { from: 'adjustments', to: 'summary', type: 'solid' },
+  { from: 'summary',     to: 'report',  type: 'solid' },
+];
+
+// Section backgrounds
+const sections = [
+  { x: 30,  y: 70,  w: 370, h: 230, domain: 'company',  label: 'COMPANY SETUP',           lx: 50,  ly: 92 },
+  { x: 430, y: 70,  w: 405, h: 115, domain: 'catalog',  label: 'GLOBAL CATALOGS (ADMIN)',  lx: 450, ly: 92 },
+  { x: 430, y: 215, w: 405, h: 220, domain: 'rates',    label: 'YOUR RATES & MACHINES',    lx: 450, ly: 237 },
+  { x: 860, y: 70,  w: 280, h: 290, domain: 'template', label: 'PRICING TEMPLATES',        lx: 880, ly: 92 },
+  { x: 30,  y: 460, w: 480, h: 240, domain: 'product',  label: 'PRODUCTS & DRAWINGS',      lx: 50,  ly: 482 },
+  { x: 540, y: 460, w: 660, h: 480, domain: 'estimate', label: 'COST ESTIMATION (per quote, snapshotted)', lx: 560, ly: 482 },
+];
+
+// ──────────────────── RENDER ────────────────────
+
+const svg = d3.select('#canvas');
+const width = window.innerWidth;
+const height = window.innerHeight;
+svg.attr('width', width).attr('height', height);
+
+const g = svg.append('g').attr('transform', 'translate(0, 56)');
+
+// Zoom
+const zoom = d3.zoom()
+  .scaleExtent([0.3, 3])
+  .on('zoom', (e) => {
+    g.attr('transform', e.transform);
+    d3.select('#zoom-level').text(Math.round(e.transform.k * 100) + '%');
+  });
+svg.call(zoom);
+
+// Fit to screen
+function fitToScreen() {
+  const bounds = { x1: 10, y1: 30, x2: 1220, y2: 960 };
+  const bw = bounds.x2 - bounds.x1;
+  const bh = bounds.y2 - bounds.y1;
+  const scale = Math.min((width - 40) / bw, (height - 100) / bh, 1.4);
+  const tx = (width - bw * scale) / 2 - bounds.x1 * scale;
+  const ty = (height - bh * scale) / 2 - bounds.y1 * scale + 20;
+  svg.transition().duration(500).call(
+    zoom.transform,
+    d3.zoomIdentity.translate(tx, ty).scale(scale)
+  );
+}
+
+d3.select('#btn-reset').on('click', () => {
+  svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity.translate(0, 56));
+});
+d3.select('#btn-fit').on('click', fitToScreen);
+
+const ARROW_LEN = 10; // arrowhead length in px — endpoint pulls back by this much
+
+// Arrow markers — symmetric triangle, refX=0 so line ends at arrowhead base center
+const defs = svg.append('defs');
+['solid', 'dashed'].forEach(type => {
+  defs.append('marker')
+    .attr('id', `arrow-${type}`)
+    .attr('viewBox', '0 0 10 10')
+    .attr('refX', 0).attr('refY', 5)
+    .attr('markerWidth', ARROW_LEN).attr('markerHeight', ARROW_LEN)
+    .attr('markerUnits', 'userSpaceOnUse')
+    .attr('orient', 'auto')
+    .append('path')
+    .attr('d', 'M 0 0 L 10 5 L 0 10 Z')
+    .attr('fill', type === 'dashed' ? '#7ea0ff' : '#8899bb');
+});
+
+// Drop shadow filter
+const filter = defs.append('filter').attr('id', 'shadow').attr('x', '-10%').attr('y', '-10%').attr('width', '130%').attr('height', '140%');
+filter.append('feDropShadow').attr('dx', 0).attr('dy', 2).attr('stdDeviation', 4).attr('flood-color', '#000').attr('flood-opacity', 0.3);
+
+// Glow filter for hover
+const glow = defs.append('filter').attr('id', 'glow').attr('x', '-20%').attr('y', '-20%').attr('width', '150%').attr('height', '150%');
+glow.append('feGaussianBlur').attr('stdDeviation', 6).attr('result', 'blur');
+glow.append('feMerge').selectAll('feMergeNode').data(['blur', 'SourceGraphic']).enter().append('feMergeNode').attr('in', d => d);
+
+// Section backgrounds
+// ─── Tenant scope container (everything except Global Catalogs) ───
+// Encompasses: Company Setup, Your Rates, Pricing Templates, Products, Cost Estimation
+const tenantBox = g.append('g');
+tenantBox.append('rect')
+  .attr('x', 15).attr('y', 55)
+  .attr('width', 1200).attr('height', 900)
+  .attr('rx', 16).attr('ry', 16)
+  .attr('fill', 'none')
+  .attr('stroke', '#4A7BF744')
+  .attr('stroke-width', 2)
+  .attr('stroke-dasharray', '10,6');
+tenantBox.append('text')
+  .attr('x', 28).attr('y', 48)
+  .attr('fill', '#4A7BF7aa')
+  .attr('font-size', 11)
+  .attr('font-weight', 700)
+  .attr('letter-spacing', '1.5px')
+  .text('YOUR COMPANY — each organization has its own data (multi-tenant)');
+
+// ─── Diagonal stripe pattern for Global Catalogs ───
+const stripePattern = defs.append('pattern')
+  .attr('id', 'global-stripes')
+  .attr('patternUnits', 'userSpaceOnUse')
+  .attr('width', 8).attr('height', 8)
+  .attr('patternTransform', 'rotate(45)');
+stripePattern.append('line')
+  .attr('x1', 0).attr('y1', 0).attr('x2', 0).attr('y2', 8)
+  .attr('stroke', '#27AE6012').attr('stroke-width', 4);
+
+// Section backgrounds — render Global Catalogs differently
+g.selectAll('.section-bg')
+  .data(sections).enter()
+  .each(function(d) {
+    const el = d3.select(this);
+    if (d.domain === 'catalog') {
+      // Global Catalogs: distinct double border + stripe fill
+      el.append('rect')
+        .attr('class', 'section-bg')
+        .attr('x', d.x).attr('y', d.y)
+        .attr('width', d.w).attr('height', d.h)
+        .attr('rx', 12).attr('ry', 12)
+        .attr('fill', 'url(#global-stripes)')
+        .attr('stroke', '#27AE6066')
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', '6,3');
+      // Inner border for double-border effect
+      el.append('rect')
+        .attr('x', d.x + 4).attr('y', d.y + 4)
+        .attr('width', d.w - 8).attr('height', d.h - 8)
+        .attr('rx', 9).attr('ry', 9)
+        .attr('fill', domains[d.domain].bg)
+        .attr('stroke', '#27AE6033')
+        .attr('stroke-width', 1);
+    } else {
+      el.append('rect')
+        .attr('class', 'section-bg')
+        .attr('x', d.x).attr('y', d.y)
+        .attr('width', d.w).attr('height', d.h)
+        .attr('rx', 12).attr('ry', 12)
+        .attr('fill', domains[d.domain].bg)
+        .attr('stroke', domains[d.domain].border)
+        .attr('stroke-width', 1);
+    }
+  });
+
+// Section labels
+g.selectAll('.section-label-text')
+  .data(sections).enter()
+  .append('text')
+  .attr('class', 'section-label')
+  .attr('x', d => d.lx).attr('y', d => d.ly)
+  .attr('fill', d => domains[d.domain].color + '88')
+  .text(d => d.label);
+
+// ─── "Shared" badge inside Global Catalogs box (bottom-right) ───
+const gcBox = sections.find(s => s.domain === 'catalog');
+const globalBadge = g.append('g');
+globalBadge.append('text')
+  .attr('x', 735).attr('y', 112)
+  .attr('text-anchor', 'middle')
+  .attr('fill', '#27AE60aa')
+  .attr('font-size', 10)
+  .attr('font-weight', 600)
+  .attr('letter-spacing', '0.5px')
+  .text('🌐 Shared across all companies');
+
+// Build node map for edge lookups
+const nodeMap = {};
+nodes.forEach(n => { nodeMap[n.id] = n; });
+
+// Helper: find connection points and exit/entry directions
+function edgePoints(fromId, toId) {
+  const a = nodeMap[fromId], b = nodeMap[toId];
+  const ax = a.x + a.w / 2, ay = a.y + a.h / 2;
+  const bx = b.x + b.w / 2, by = b.y + b.h / 2;
+
+  let x1, y1, x2, y2, exitDir, entryDir;
+  const dx = bx - ax, dy = by - ay;
+  const absDx = Math.abs(dx), absDy = Math.abs(dy);
+
+  // Determine exit side of source
+  if (absDy * a.w > absDx * a.h) {
+    if (dy > 0) { x1 = ax; y1 = a.y + a.h; exitDir = 'down'; }
+    else        { x1 = ax; y1 = a.y;        exitDir = 'up'; }
+  } else {
+    if (dx > 0) { x1 = a.x + a.w; y1 = ay; exitDir = 'right'; }
+    else        { x1 = a.x;        y1 = ay; exitDir = 'left'; }
+  }
+
+  // Determine entry side of target (based on source center to target center direction)
+  const dx2 = ax - bx, dy2 = ay - by;
+  const absDx2 = Math.abs(dx2), absDy2 = Math.abs(dy2);
+  if (absDy2 * b.w > absDx2 * b.h) {
+    if (dy2 > 0) { x2 = bx; y2 = b.y + b.h; entryDir = 'down'; }
+    else         { x2 = bx; y2 = b.y;        entryDir = 'up'; }
+  } else {
+    if (dx2 > 0) { x2 = b.x + b.w; y2 = by; entryDir = 'right'; }
+    else         { x2 = b.x;        y2 = by; entryDir = 'left'; }
+  }
+
+  return { x1, y1, x2, y2, exitDir, entryDir };
+}
+
+// Helper: compute control point offset perpendicular to a node face
+function ctrlOffset(x, y, dir, dist) {
+  switch(dir) {
+    case 'up':    return { x, y: y - dist };
+    case 'down':  return { x, y: y + dist };
+    case 'left':  return { x: x - dist, y };
+    case 'right': return { x: x + dist, y };
+  }
+}
+
+// Helper: pull a point back along a direction (so arrowhead tip lands on border)
+function pullBack(x, y, dir, amount) {
+  switch(dir) {
+    case 'up':    return { x, y: y + amount };
+    case 'down':  return { x, y: y - amount };
+    case 'left':  return { x: x + amount, y };
+    case 'right': return { x: x - amount, y };
+  }
+}
+
+// Draw edges using cubic beziers that arrive perpendicular to each node face
+const edgeGroup = g.append('g').attr('class', 'edges');
+edges.forEach(e => {
+  const pts = edgePoints(e.from, e.to);
+  // Pull the endpoint back so the arrowhead tip touches the border, not the line end
+  const end = pullBack(pts.x2, pts.y2, pts.entryDir, ARROW_LEN);
+  const dist = Math.max(40, Math.hypot(pts.x2 - pts.x1, pts.y2 - pts.y1) * 0.35);
+  const c1 = ctrlOffset(pts.x1, pts.y1, pts.exitDir, dist);
+  const c2 = ctrlOffset(end.x, end.y, pts.entryDir, dist);
+
+  const pathD = `M ${pts.x1} ${pts.y1} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${end.x} ${end.y}`;
+
+  edgeGroup.append('path')
+    .attr('d', pathD)
+    .attr('fill', 'none')
+    .attr('stroke', e.type === 'dashed' ? '#7ea0ffaa' : '#8899bbaa')
+    .attr('stroke-width', e.type === 'dashed' ? 2 : 1.8)
+    .attr('stroke-dasharray', e.type === 'dashed' ? '7,4' : 'none')
+    .attr('marker-end', `url(#arrow-${e.type})`)
+    .attr('data-from', e.from)
+    .attr('data-to', e.to);
+
+  if (e.label) {
+    // Place label at the midpoint of the bezier (t=0.5)
+    const t = 0.5;
+    const mt = 1 - t;
+    const lx = mt*mt*mt*pts.x1 + 3*mt*mt*t*c1.x + 3*mt*t*t*c2.x + t*t*t*end.x;
+    const ly = mt*mt*mt*pts.y1 + 3*mt*mt*t*c1.y + 3*mt*t*t*c2.y + t*t*t*end.y;
+    edgeGroup.append('text')
+      .attr('x', lx).attr('y', ly - 7 + (e.labelDy || 0))
+      .attr('text-anchor', 'middle')
+      .attr('fill', e.type === 'dashed' ? '#7ea0ff' : '#8899bb')
+      .attr('font-size', 9)
+      .attr('font-style', 'italic')
+      .text(e.label);
+  }
+});
+
+// Draw nodes
+const tooltip = d3.select('#tooltip');
+
+const nodeGroup = g.selectAll('.node')
+  .data(nodes).enter()
+  .append('g')
+  .attr('class', 'node')
+  .attr('transform', d => `translate(${d.x}, ${d.y})`)
+  .style('cursor', 'pointer');
+
+// Node background
+nodeGroup.append('rect')
+  .attr('width', d => d.w).attr('height', d => d.h)
+  .attr('rx', 10).attr('ry', 10)
+  .attr('fill', d => {
+    const c = domains[d.domain].color;
+    return c + '20';
+  })
+  .attr('stroke', d => domains[d.domain].color + '66')
+  .attr('stroke-width', 1.5)
+  .attr('filter', 'url(#shadow)');
+
+// Icon
+nodeGroup.append('text')
+  .attr('x', 12).attr('y', d => d.h / 2 + 1)
+  .attr('dominant-baseline', 'middle')
+  .attr('font-size', d => d.id === 'adjustments' ? 16 : 15)
+  .text(d => d.icon);
+
+// Label
+nodeGroup.append('text')
+  .attr('x', 34).attr('y', d => d.h / 2 + 1)
+  .attr('dominant-baseline', 'middle')
+  .attr('fill', '#e0e0e0')
+  .attr('font-size', 13)
+  .attr('font-weight', 500)
+  .text(d => d.label);
+
+// Hover interactions
+nodeGroup
+  .on('mouseenter', function(event, d) {
+    const el = d3.select(this);
+    el.select('rect')
+      .transition().duration(150)
+      .attr('stroke', domains[d.domain].color)
+      .attr('stroke-width', 2.5)
+      .attr('filter', 'url(#glow)');
+
+    // Highlight connected edges
+    edgeGroup.selectAll('path')
+      .transition().duration(150)
+      .attr('stroke-opacity', function() {
+        const from = d3.select(this).attr('data-from');
+        const to = d3.select(this).attr('data-to');
+        return (from === d.id || to === d.id) ? 1 : 0.2;
+      })
+      .attr('stroke-width', function() {
+        const from = d3.select(this).attr('data-from');
+        const to = d3.select(this).attr('data-to');
+        return (from === d.id || to === d.id) ? 2.5 : 1;
+      });
+
+    // Dim other nodes
+    nodeGroup.transition().duration(150)
+      .style('opacity', function(n) {
+        if (n.id === d.id) return 1;
+        const connected = edges.some(e =>
+          (e.from === d.id && e.to === n.id) ||
+          (e.to === d.id && e.from === n.id)
+        );
+        return connected ? 1 : 0.3;
+      });
+
+    // Tooltip
+    const descText = d.desc.replace(/\\n/g, '\n');
+    tooltip.select('.tt-title').text(d.icon + ' ' + d.label);
+    tooltip.select('.tt-body').html(descText.replace(/\n/g, '<br>'));
+    tooltip.select('.tt-db').text(d.db);
+    tooltip.style('opacity', 1)
+      .style('left', (event.clientX + 16) + 'px')
+      .style('top', (event.clientY - 10) + 'px');
+  })
+  .on('mousemove', function(event) {
+    const ttNode = tooltip.node();
+    const ttW = ttNode.offsetWidth;
+    const ttH = ttNode.offsetHeight;
+    let left = event.clientX + 16;
+    let top = event.clientY - 10;
+    if (left + ttW > width - 10) left = event.clientX - ttW - 16;
+    if (top + ttH > height - 10) top = height - ttH - 10;
+    tooltip.style('left', left + 'px').style('top', top + 'px');
+  })
+  .on('mouseleave', function() {
+    nodeGroup.transition().duration(200).style('opacity', 1);
+    nodeGroup.selectAll('rect')
+      .transition().duration(200)
+      .attr('stroke', d => domains[d.domain].color + '66')
+      .attr('stroke-width', 1.5)
+      .attr('filter', 'url(#shadow)');
+    edgeGroup.selectAll('path')
+      .transition().duration(200)
+      .attr('stroke-opacity', 1)
+      .attr('stroke-width', function() {
+        return d3.select(this).attr('stroke-dasharray') !== 'none' ? 2 : 1.8;
+      });
+    tooltip.style('opacity', 0);
+  });
+
+// ─── Cost formula annotation ───
+const formulaGroup = g.append('g').attr('transform', 'translate(920, 760)');
+formulaGroup.append('rect')
+  .attr('width', 260).attr('height', 140).attr('rx', 8)
+  .attr('fill', '#1a1d2eee').attr('stroke', '#2a2d3e');
+formulaGroup.append('text').attr('x', 14).attr('y', 22).attr('fill', '#888').attr('font-size', 10).attr('font-weight', 600).attr('letter-spacing', '1px').text('COST FORMULA');
+
+const formulaLines = [
+  { y: 44, text: 'Material Cost', color: '#E74C3C' },
+  { y: 58, text: '  = weight/unit × ₹/kg', color: '#888' },
+  { y: 76, text: '+ Operation Costs', color: '#E74C3C' },
+  { y: 90, text: '  = Σ (setup + cycle) × ₹/hr', color: '#888' },
+  { y: 108, text: '+ Overheads − Discounts', color: '#9B59B6' },
+  { y: 126, text: '= Net Cost/Unit × Qty = Total', color: '#fff' },
+];
+formulaLines.forEach(l => {
+  formulaGroup.append('text').attr('x', 14).attr('y', l.y).attr('fill', l.color).attr('font-size', 12).attr('font-family', 'monospace').text(l.text);
+});
+
+// Initial fit
+setTimeout(fitToScreen, 100);
+
+// Resize handler
+window.addEventListener('resize', () => {
+  const w = window.innerWidth, h = window.innerHeight;
+  svg.attr('width', w).attr('height', h);
+});
+</script>
+
+</body>
+</html>

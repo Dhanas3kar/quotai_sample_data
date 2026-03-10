@@ -1,0 +1,9 @@
+id,template_id,name,description,category,type,value,apply_on,sort_order,created_at
+d0000000-0000-0000-0000-000000000001,c0000000-0000-0000-0000-000000000001,Commercial Overhead,Admin and facility costs,overhead,percentage,8.00,subtotal,1,2024-08-01T09:00:00Z
+d0000000-0000-0000-0000-000000000002,c0000000-0000-0000-0000-000000000001,Packaging,Standard domestic packaging,overhead,fixed_per_unit,50.00,subtotal,2,2024-08-01T09:00:00Z
+d0000000-0000-0000-0000-000000000003,c0000000-0000-0000-0000-000000000001,Freight,Domestic freight charge,overhead,fixed_per_unit,30.00,subtotal,3,2024-08-01T09:00:00Z
+d0000000-0000-0000-0000-000000000004,c0000000-0000-0000-0000-000000000001,Volume Discount,Discount for bulk orders,discount,percentage,5.00,subtotal,4,2024-08-01T09:00:00Z
+d0000000-0000-0000-0000-000000000005,c0000000-0000-0000-0000-000000000002,Commercial Overhead,Admin and facility costs,overhead,percentage,10.00,subtotal,1,2024-08-01T09:30:00Z
+d0000000-0000-0000-0000-000000000006,c0000000-0000-0000-0000-000000000002,Export Packaging,Heavy-duty export packaging,overhead,fixed_per_unit,120.00,subtotal,2,2024-08-01T09:30:00Z
+d0000000-0000-0000-0000-000000000007,c0000000-0000-0000-0000-000000000002,International Freight,Sea/air freight charges,overhead,fixed_per_unit,200.00,subtotal,3,2024-08-01T09:30:00Z
+d0000000-0000-0000-0000-000000000008,c0000000-0000-0000-0000-000000000002,Export Discount,Export incentive discount,discount,percentage,3.00,subtotal,4,2024-08-01T09:30:00Z

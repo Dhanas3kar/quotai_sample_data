@@ -1,0 +1,6 @@
+id,name,description,category,is_active,created_at
+50000000-0000-0000-0000-000000000001,Turning,Lathe-based cylindrical machining,machining,true,2024-01-01T00:00:00Z
+50000000-0000-0000-0000-000000000002,Drilling,Hole drilling on CNC mill,machining,true,2024-01-01T00:00:00Z
+50000000-0000-0000-0000-000000000003,Spot Facing,Flat-bottom counterbore for bolt seating,machining,true,2024-01-01T00:00:00Z
+50000000-0000-0000-0000-000000000004,Surface Grinding,Precision flat surface finishing,finishing,true,2024-01-01T00:00:00Z
+50000000-0000-0000-0000-000000000005,Heat Treatment,Hardening and stress relief,treatment,true,2024-01-01T00:00:00Z

@@ -66,4 +66,3 @@ python -m pytest quotai/tests
 
 ## Project Documentation
 - **MIGRATION_DESIGN.md**: Detailed breakdown of the validation and transformation rules.
-- **INTERVIEW_GUIDE.md**: Q&A style guide for explaining this repository technically.

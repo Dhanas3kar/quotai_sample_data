@@ -37,3 +37,5 @@ npm-debug.log*
 # QuotAI specific
 output/
 .pytest_cache/
+MIGRATION_DESIGN.md
+INTERVIEW_GUIDE.md

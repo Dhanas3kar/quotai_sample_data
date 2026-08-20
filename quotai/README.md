@@ -24,17 +24,11 @@ This process is **slow**, **inconsistent** between estimators, and **prone to ca
 ```
 quotai/
 │
-├── app/
-│   └── streamlit_app.py          # Interactive Streamlit UI
-│
 ├── engine/
 │   ├── estimator.py              # CostEstimator — main pipeline class
 │   ├── material_cost.py          # Weight & material cost calculation
 │   ├── operation_cost.py         # Machining time & operation cost
 │   └── pricing_engine.py         # Pricing template adjustments
-│
-├── extraction/
-│   └── feature_extractor.py      # Mock AI feature extraction
 │
 ├── data/
 │   └── csv_loader.py             # CSV data loader & lookup helpers
@@ -62,7 +56,7 @@ quotai/
                      │
                      ▼
           ┌─────────────────────┐
-          │  Feature Extraction │  ← Mock AI (simulates Gemini)
+          │   Supplied Features │
           │  (dimensions, holes)│
           └──────────┬──────────┘
                      │
@@ -118,7 +112,7 @@ quotai/
 | Language | Python 3.10+ |
 | Financial Math | `decimal.Decimal` (no float rounding errors) |
 | Data Storage | CSV files (transparent, editable) |
-| UI Framework | Streamlit |
+
 | Visualization | Plotly (interactive pie charts) |
 | Testing | pytest |
 | Report | Self-contained HTML |
@@ -133,12 +127,6 @@ quotai/
 pip install -r requirements.txt
 ```
 
-### 2. Run the Streamlit app
-
-```bash
-cd /path/to/quotai_sample_data
-streamlit run quotai/app/streamlit_app.py
-```
 
 ### 3. Run tests
 
@@ -223,7 +211,6 @@ See `DATA_MODEL.md` for full entity-relationship details.
 
 ## 🔮 Future Improvements
 
-- Replace mock extraction with real AI (Gemini Vision API)
 - Add multi-operation routing with sequencing
 - Persist data in SQLite or PostgreSQL
 - Add user authentication and role-based access

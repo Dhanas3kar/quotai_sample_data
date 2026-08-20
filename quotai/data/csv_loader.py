@@ -41,7 +41,6 @@ class CSVDataLoader:
         self.work_center_rates: List[Dict] = []
         self.product_families: List[Dict] = []
         self.product_variants: List[Dict] = []
-        self.variant_extractions: List[Dict] = []
         self.pricing_templates: List[Dict] = []
         self.template_line_items: List[Dict] = []
         self.organizations: List[Dict] = []
@@ -77,7 +76,6 @@ class CSVDataLoader:
         self.work_center_rates = self._read_csv("work_center_rate.csv")
         self.product_families = self._read_csv("product_family.csv")
         self.product_variants = self._read_csv("product_variant.csv")
-        self.variant_extractions = self._read_csv("variant_extraction.csv")
         self.pricing_templates = self._read_csv("pricing_template.csv")
         self.template_line_items = self._read_csv("template_line_item.csv")
         # Frozen estimation snapshots
@@ -103,13 +101,6 @@ class CSVDataLoader:
     def get_variant_names(self) -> List[str]:
         """Return a list of all variant names."""
         return [v["name"] for v in self.product_variants]
-
-    def get_extraction_for_variant(self, variant_id: str) -> Optional[Dict]:
-        """Return parsed extraction JSON for a variant id."""
-        for ex in self.variant_extractions:
-            if ex["variant_id"] == variant_id:
-                return json.loads(ex["extraction_data"])
-        return None
 
     def get_material_by_name(self, name: str) -> Optional[Dict]:
         """

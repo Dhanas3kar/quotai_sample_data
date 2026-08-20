@@ -1,1 +1,0 @@
-# QuotAI App Package

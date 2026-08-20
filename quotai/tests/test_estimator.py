@@ -26,10 +26,7 @@ from quotai.utils.math_utils import (
 from quotai.engine.material_cost import compute_weight, compute_material_cost
 from quotai.engine.operation_cost import compute_operation_time, compute_operation_cost
 from quotai.engine.pricing_engine import apply_pricing_template
-from quotai.extraction.feature_extractor import (
-    extract_features_from_variant,
-    override_features,
-)
+
 from quotai.engine.estimator import CostEstimator, EstimationError
 
 SAMPLE_DATA_DIR = os.path.join(PROJECT_ROOT, "sample_data")
@@ -233,92 +230,6 @@ class TestPricingEngine:
 
 
 # ────────────────────────────────────────────────────────────────────────
-# Feature extraction
-# ────────────────────────────────────────────────────────────────────────
-
-class TestFeatureExtractor:
-    """Tests for mock feature extraction."""
-
-    def test_known_variant(self):
-        """Known variant name returns correct features."""
-        features = extract_features_from_variant("bearing_ring")
-        assert features["outer_diameter_mm"] == 150
-        assert features["inner_diameter_mm"] == 80
-
-    def test_unknown_variant_defaults(self):
-        """Unknown variant returns default features."""
-        features = extract_features_from_variant("some_unknown_part")
-        assert "outer_diameter_mm" in features
-        assert features["outer_diameter_mm"] == 100  # default
-
-    def test_override_features(self):
-        """Manual overrides should replace extracted values."""
-        features = extract_features_from_variant("bearing_ring")
-        updated = override_features(features, outer_diameter=200)
-        assert updated["outer_diameter_mm"] == 200
-        assert updated["inner_diameter_mm"] == 80  # unchanged
-
-    def test_ref_extraction_used_as_fallback(self):
-        """When variant is unknown and ref_extraction provided, use it."""
-        ref = {
-            "outer_diameter_mm": 250,
-            "inner_diameter_mm": 130,
-            "length_mm": 50,
-            "material": "SS 316",
-        }
-        features = extract_features_from_variant("unknown_xyz", ref_extraction=ref)
-        assert features["outer_diameter_mm"] == 250
-        # "material" key should be normalised to "material_hint"
-        assert "material_hint" in features
-        assert "material" not in features
-
-    def test_variant_extraction_takes_priority(self):
-        """Stored variant extraction should override mock lookup."""
-        stored = {
-            "outer_diameter_mm": 999,
-            "inner_diameter_mm": 500,
-            "length_mm": 10,
-            "holes": [],
-            "material": "Mild Steel",
-        }
-        # "bearing_ring" would normally match the mock,
-        # but stored extraction should win.
-        features = extract_features_from_variant(
-            "bearing_ring", variant_extraction=stored
-        )
-        assert features["outer_diameter_mm"] == 999
-        assert features["material_hint"] == "Mild Steel"
-
-    def test_drawing_upload_triggers_extraction(self):
-        """Uploading drawing bytes should set _extraction_source."""
-        fake_drawing = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100  # fake PNG header
-        features = extract_features_from_variant(
-            "bearing_ring",
-            variant_drawing_bytes=fake_drawing,
-        )
-        assert features["_extraction_source"] == "mock_ai_from_upload"
-        assert features["_drawing_size_kb"] > 0
-        assert features["outer_diameter_mm"] == 150  # bearing_ring mock
-
-    def test_drawing_upload_unknown_variant_with_ref(self):
-        """Upload for unknown variant uses ref_extraction as baseline."""
-        fake_drawing = b"\x89PNG" + b"\x00" * 50
-        ref = {
-            "outer_diameter_mm": 300,
-            "inner_diameter_mm": 150,
-            "length_mm": 75,
-            "material": "SS 316",
-        }
-        features = extract_features_from_variant(
-            "totally_unknown_part",
-            ref_extraction=ref,
-            variant_drawing_bytes=fake_drawing,
-        )
-        assert features["_extraction_source"] == "ref_baseline_from_upload"
-        assert features["outer_diameter_mm"] == 300
-
-
-# ────────────────────────────────────────────────────────────────────────
 # Integration: Full pipeline
 # ────────────────────────────────────────────────────────────────────────
 
@@ -329,10 +240,21 @@ class TestCostEstimatorIntegration:
     def estimator(self):
         return CostEstimator(SAMPLE_DATA_DIR)
 
-    def test_estimate_returns_required_keys(self, estimator):
+    @pytest.fixture
+    def mock_features(self):
+        return {
+            "outer_diameter_mm": 100,
+            "inner_diameter_mm": 50,
+            "length_mm": 60,
+            "holes": [],
+            "material_hint": "Stainless Steel",
+        }
+
+    def test_estimate_returns_required_keys(self, estimator, mock_features):
         """Result dictionary must contain all expected keys."""
         result = estimator.estimate(
-            variant="bearing_ring",
+            features=mock_features,
+            variant_name="bearing_ring",
             quantity=100,
             scrap_percent=5,
             effective_date="2026-03-09",
@@ -344,10 +266,11 @@ class TestCostEstimatorIntegration:
         for key in required_keys:
             assert key in result, f"Missing key: {key}"
 
-    def test_total_equals_net_times_quantity(self, estimator):
+    def test_total_equals_net_times_quantity(self, estimator, mock_features):
         """Total cost should equal net cost per unit × quantity."""
         result = estimator.estimate(
-            variant="spacer_v1",
+            features=mock_features,
+            variant_name="spacer_v1",
             quantity=50,
             scrap_percent=3,
             effective_date="2026-03-09",
@@ -355,31 +278,23 @@ class TestCostEstimatorIntegration:
         expected_total = round_currency(result["net_cost_per_unit"] * Decimal("50"))
         assert result["total_cost"] == expected_total
 
-    def test_missing_material_raises(self, estimator):
+    def test_missing_material_raises(self, estimator, mock_features):
         """Unknown material hint should raise EstimationError."""
-        from quotai.extraction import feature_extractor
-        original = feature_extractor._MOCK_FEATURES.copy()
-        feature_extractor._MOCK_FEATURES["test_unobtainium"] = {
-            "outer_diameter_mm": 100,
-            "inner_diameter_mm": 50,
-            "length_mm": 60,
-            "holes": [],
-            "material_hint": "Unobtainium",
-        }
-        try:
-            with pytest.raises(EstimationError, match="Material not found"):
-                estimator.estimate(
-                    variant="test_unobtainium",
-                    quantity=1,
-                    effective_date="2026-03-09",
-                )
-        finally:
-            feature_extractor._MOCK_FEATURES.pop("test_unobtainium", None)
+        features = mock_features.copy()
+        features["material_hint"] = "Unobtainium"
+        with pytest.raises(EstimationError, match="Material not found"):
+            estimator.estimate(
+                features=features,
+                variant_name="test_unobtainium",
+                quantity=1,
+                effective_date="2026-03-09",
+            )
 
-    def test_costs_are_positive(self, estimator):
+    def test_costs_are_positive(self, estimator, mock_features):
         """All cost values should be positive."""
         result = estimator.estimate(
-            variant="flange_adapter",
+            features=mock_features,
+            variant_name="flange_adapter",
             quantity=200,
             scrap_percent=2,
             effective_date="2026-03-09",
@@ -393,10 +308,11 @@ class TestCostEstimatorIntegration:
 
     # ── 5-Step Flow Tests ──────────────────────────────────────────────
 
-    def test_frozen_snapshot_keys(self, estimator):
+    def test_frozen_snapshot_keys(self, estimator, mock_features):
         """Frozen estimation must include all snapshot dictionaries."""
         result = estimator.estimate(
-            variant="spacer_v1",
+            features=mock_features,
+            variant_name="spacer_v1",
             quantity=10,
             effective_date="2026-03-09",
         )
@@ -430,18 +346,19 @@ class TestCostEstimatorIntegration:
                    "net_cost_per_unit", "total_cost", "currency"):
             assert k in sm, f"summary missing key: {k}"
 
-    def test_family_auto_detection(self, estimator):
+    def test_family_auto_detection(self, estimator, mock_features):
         """Variant should auto-detect its parent product family."""
         # Use a variant that exists in CSV (Spacer v1 - Standard)
         result = estimator.estimate(
-            variant="Spacer v1 - Standard",
+            features=mock_features,
+            variant_name="Spacer v1 - Standard",
             quantity=1,
             effective_date="2026-03-09",
         )
         # Family should be resolved (not N/A)
         assert result["family_name"] != "N/A"
 
-    def test_explicit_family_selection(self, estimator):
+    def test_explicit_family_selection(self, estimator, mock_features):
         """Explicit family_name parameter should be used."""
         families = estimator.loader.get_family_names()
         if not families:
@@ -455,17 +372,19 @@ class TestCostEstimatorIntegration:
         vname = variants[0]["name"]
 
         result = estimator.estimate(
-            variant=vname,
+            features=mock_features,
+            variant_name=vname,
             quantity=1,
             effective_date="2026-03-09",
             family_name=family,
         )
         assert result["family_name"] == family
 
-    def test_operation_snapshots_have_required_fields(self, estimator):
+    def test_operation_snapshots_have_required_fields(self, estimator, mock_features):
         """Each operation snapshot must contain rate and time fields."""
         result = estimator.estimate(
-            variant="spacer_v1",
+            features=mock_features,
+            variant_name="spacer_v1",
             quantity=1,
             effective_date="2026-03-09",
         )
@@ -476,10 +395,11 @@ class TestCostEstimatorIntegration:
                        "cost_per_unit"):
                 assert k in op, f"operation_snapshot missing key: {k}"
 
-    def test_adjustment_snapshots_have_sort_order(self, estimator):
+    def test_adjustment_snapshots_have_sort_order(self, estimator, mock_features):
         """Each adjustment snapshot must include sort_order."""
         result = estimator.estimate(
-            variant="spacer_v1",
+            features=mock_features,
+            variant_name="spacer_v1",
             quantity=1,
             effective_date="2026-03-09",
         )
@@ -487,10 +407,11 @@ class TestCostEstimatorIntegration:
             assert "sort_order" in adj, "adjustment_snapshot missing sort_order"
             assert isinstance(adj["sort_order"], int)
 
-    def test_estimation_report_record(self, estimator):
+    def test_estimation_report_record(self, estimator, mock_features):
         """Frozen snapshot must include an EstimationReport record."""
         result = estimator.estimate(
-            variant="spacer_v1",
+            features=mock_features,
+            variant_name="spacer_v1",
             quantity=1,
             effective_date="2026-03-09",
         )
@@ -500,10 +421,11 @@ class TestCostEstimatorIntegration:
         assert rpt["format"] == "html"
         assert "generated_at" in rpt
 
-    def test_rate_missing_flagged(self, estimator):
+    def test_rate_missing_flagged(self, estimator, mock_features):
         """Operations with no configured rate should be flagged, not skipped."""
         result = estimator.estimate(
-            variant="spacer_v1",
+            features=mock_features,
+            variant_name="spacer_v1",
             quantity=1,
             effective_date="2026-03-09",
         )

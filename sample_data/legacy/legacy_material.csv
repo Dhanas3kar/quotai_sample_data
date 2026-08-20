@@ -1,0 +1,7 @@
+mat_code,mat_name,mat_grade,mat_cat,density,active
+MAT-01,Stainless Steel,316,ferrous,8000,Y
+MAT-02,Aluminum,6061-T6,non-ferrous,2700,Y
+MAT-03,Mild Steel,EN8,ferrous,7850,N
+MAT-04,,304,ferrous,-1,Y
+MAT-05,Titanium,,non-ferrous,4500,
+MAT-01,Stainless Steel,316,ferrous,8000,Y

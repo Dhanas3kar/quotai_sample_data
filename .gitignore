@@ -33,3 +33,7 @@ npm-debug.log*
 .idea/
 *.bak
 *.tmp
+
+# QuotAI specific
+output/
+.pytest_cache/

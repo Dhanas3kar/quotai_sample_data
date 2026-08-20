@@ -17,10 +17,7 @@ from decimal import Decimal
 from typing import Dict, List, Optional
 
 from quotai.data.csv_loader import CSVDataLoader
-from quotai.extraction.feature_extractor import (
-    extract_features_from_variant,
-    override_features,
-)
+
 from quotai.engine.material_cost import compute_weight, compute_material_cost
 from quotai.engine.operation_cost import compute_all_operations
 from quotai.engine.pricing_engine import apply_pricing_template
@@ -73,27 +70,21 @@ class CostEstimator:
 
     def estimate(
         self,
-        variant: str,
+        features: Dict,
         quantity: int = 1,
         scrap_percent: float = 0.0,
         effective_date: str = "2026-03-09",
         template_name: str = "Standard Domestic",
+        variant_name: str = "Unknown Variant",
         family_name: Optional[str] = None,
-        variant_drawing_bytes: Optional[bytes] = None,
-        # Optional manual overrides
-        outer_diameter: Optional[float] = None,
-        inner_diameter: Optional[float] = None,
-        length: Optional[float] = None,
-        hole_count: Optional[int] = None,
-        hole_diameter: Optional[float] = None,
     ) -> Dict:
         """
-        Run the full 5-step estimation pipeline and return a frozen result.
+        Run the full estimation pipeline and return a frozen result.
 
         Parameters
         ----------
-        variant : str
-            Name or keyword identifying the product variant.
+        features : dict
+            The pre-extracted or externally supplied features (e.g., dimensions, material_hint).
         quantity : int
             Number of units to quote.
         scrap_percent : float
@@ -102,67 +93,28 @@ class CostEstimator:
             ISO date string used for rate lookups.
         template_name : str
             Name of the pricing template to apply.
+        variant_name : str
+            Name or keyword identifying the product variant (for reporting).
         family_name : str | None
             If provided, selects the parent product family explicitly.
-            Otherwise auto-resolved from the variant record.
-        outer_diameter, inner_diameter, length : float | None
-            Manual overrides for extracted dimensions (mm).
-        hole_count, hole_diameter : int | float | None
-            Manual overrides for hole features.
 
         Returns
         -------
         dict
             Frozen cost estimation snapshot.
-
-        Raises
-        ------
-        EstimationError
-            If required data (variant, family, material, rates, template) is
-            missing.
         """
         eff_date = date.fromisoformat(effective_date)
 
         # ──────────────────────────────────────────────────────────────
-        # STEP 1  Select product family (with reference drawing)
+        # STEP 1  Select product family (for snapshotting context)
         # ──────────────────────────────────────────────────────────────
-        family, variant_row = self._resolve_family_and_variant(variant, family_name)
+        family, variant_row = self._resolve_family_and_variant(variant_name, family_name)
 
-        ref_extraction = None
-        if family:
-            ref_extraction = self.loader.get_family_ref_extraction(family["id"])
-
+        # In the new architecture, features are provided directly to this engine.
+        # No mock AI extraction is performed.
+        
         # ──────────────────────────────────────────────────────────────
-        # STEP 2  AI feature extraction — uses reference as context
-        # ──────────────────────────────────────────────────────────────
-        variant_extraction = None
-        if variant_row:
-            variant_extraction = self.loader.get_extraction_for_variant(
-                variant_row["id"]
-            )
-
-        ref_drawing_path = family.get("ref_drawing_path") if family else None
-
-        features = extract_features_from_variant(
-            variant_name=variant,
-            ref_extraction=ref_extraction,
-            variant_extraction=variant_extraction,
-            variant_drawing_bytes=variant_drawing_bytes,
-            ref_drawing_path=ref_drawing_path,
-        )
-
-        # Apply manual engineering overrides
-        features = override_features(
-            features,
-            outer_diameter=outer_diameter,
-            inner_diameter=inner_diameter,
-            length=length,
-            hole_count=hole_count,
-            hole_diameter=hole_diameter,
-        )
-
-        # ──────────────────────────────────────────────────────────────
-        # STEP 3  Look up material rates & work-center operation rates
+        # STEP 2  Look up material rates & work-center operation rates
         # ──────────────────────────────────────────────────────────────
         material_hint = features.get("material_hint", "Stainless Steel")
         material = self.loader.get_material_by_name(material_hint)
@@ -222,7 +174,7 @@ class CostEstimator:
         frozen = self._build_frozen_snapshot(
             estimation_id=estimation_id,
             timestamp=now,
-            variant_name=variant,
+            variant_name=variant_name,
             family_name=family_name_snap,
             features=features,
             material=material,
@@ -238,7 +190,6 @@ class CostEstimator:
             quantity=quantity,
             scrap_percent=scrap_percent,
             effective_date=effective_date,
-            ref_extraction=ref_extraction,
         )
 
         return frozen
@@ -299,7 +250,6 @@ class CostEstimator:
         quantity: int,
         scrap_percent: float,
         effective_date: str,
-        ref_extraction: Optional[Dict],
     ) -> Dict:
         """
         Assemble a frozen estimation snapshot matching the data-model tables:
@@ -381,7 +331,7 @@ class CostEstimator:
 
             # Feature extraction context
             "features": features,
-            "ref_extraction": ref_extraction,
+
 
             # Frozen cost snapshots
             "material_snapshot": frozen_material,

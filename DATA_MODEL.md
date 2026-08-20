@@ -75,7 +75,6 @@ Organization ─┬── UserGroup
 | description                  | string    | nullable           |                                              |
 | ref_drawing_path             | string    | NOT NULL           | File path to stored reference drawing        |
 | ref_drawing_thumbnail_path   | string    | nullable           | For UI display                               |
-| ref_extraction_data          | JSON      | nullable           | AI extraction of reference drawing features  |
 | created_by                   | UUID      | FK → User          |                                              |
 | created_at                   | timestamp | NOT NULL           |                                              |
 | updated_at                   | timestamp | NOT NULL           |                                              |
@@ -93,22 +92,7 @@ One reference drawing per family. Family is tenant-scoped.
 | created_by   | UUID      | FK → User             |                                  |
 | created_at   | timestamp | NOT NULL              |                                  |
 
-### VariantExtraction
-| Column          | Type      | Constraints          | Notes                                          |
-|-----------------|-----------|----------------------|------------------------------------------------|
-| id              | UUID      | PK                   |                                                |
-| variant_id      | UUID      | FK → ProductVariant  |                                                |
-| extraction_data | JSON      | NOT NULL             | Structured features: holes, dims, threads, etc.|
-| ai_model_used   | string    | NOT NULL             | e.g. "gemini-2.5-flash"                       |
-| raw_ai_response | JSON      | nullable             | Full AI response for audit/debugging           |
-| created_at      | timestamp | NOT NULL             |                                                |
 
-**AI extraction approach:** The variant drawing and the family's reference drawing are both
-sent to Gemini. The reference extraction JSON is included in the prompt as a "known good"
-baseline. The AI performs a full extraction of the variant, using the reference as grounding
-context to improve accuracy and consistency.
-
----
 
 ## 3. Global Catalogs (Platform Admin)
 
